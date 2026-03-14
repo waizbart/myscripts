@@ -6,6 +6,8 @@ const dockerComposeTpl = `services:
     build: {{$.ProjectDir}}/{{.Name}}
     container_name: {{.Name}}
     restart: unless-stopped
+    env_file:
+      - {{$.ProjectDir}}/{{.Name}}/.env
     ports:
       - "{{.Port}}:{{.Port}}"
     networks:
