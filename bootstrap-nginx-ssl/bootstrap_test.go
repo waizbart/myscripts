@@ -263,6 +263,24 @@ func TestSetupNginx(t *testing.T) {
 	}
 }
 
+func TestCloneURL(t *testing.T) {
+	tests := []struct {
+		url, token, expected string
+	}{
+		{"https://github.com/user/repo.git", "ghp_abc123", "https://ghp_abc123@github.com/user/repo.git"},
+		{"http://github.com/user/repo.git", "ghp_abc123", "http://ghp_abc123@github.com/user/repo.git"},
+		{"https://github.com/user/repo.git", "", "https://github.com/user/repo.git"},
+		{"git@github.com:user/repo.git", "ghp_abc123", "git@github.com:user/repo.git"},
+		{"/local/path/repo.git", "ghp_abc123", "/local/path/repo.git"},
+	}
+	for _, tt := range tests {
+		got := cloneURL(tt.url, tt.token)
+		if got != tt.expected {
+			t.Errorf("cloneURL(%q, %q) = %q, want %q", tt.url, tt.token, got, tt.expected)
+		}
+	}
+}
+
 func TestLocalExecutor(t *testing.T) {
 	exec := &LocalExecutor{}
 
