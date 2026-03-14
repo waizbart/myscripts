@@ -21,13 +21,13 @@ func cloneURL(repoURL, token string) string {
 }
 
 func SetupRepos(cfg *Config, exec Executor) error {
-	fmt.Println("→ Creating /projects directory…")
-	if _, err := exec.Run("mkdir -p /projects"); err != nil {
-		return fmt.Errorf("failed to create /projects: %w", err)
+	fmt.Printf("→ Creating %s directory…\n", cfg.ProjectDir)
+	if _, err := exec.Run("mkdir -p " + cfg.ProjectDir); err != nil {
+		return fmt.Errorf("failed to create %s: %w", cfg.ProjectDir, err)
 	}
 
 	for _, svc := range cfg.Services {
-		dest := "/projects/" + svc.Name
+		dest := cfg.ProjectDir + "/" + svc.Name
 		url := cloneURL(svc.RepoURL, cfg.GitToken)
 		fmt.Printf("→ Cloning %s into %s…\n", svc.RepoURL, dest)
 

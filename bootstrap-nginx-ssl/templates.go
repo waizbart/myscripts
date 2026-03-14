@@ -3,7 +3,7 @@ package main
 const dockerComposeTpl = `services:
 {{- range .Services}}
   {{.Name}}:
-    build: /projects/{{.Name}}
+    build: {{$.ProjectDir}}/{{.Name}}
     container_name: {{.Name}}
     restart: unless-stopped
     ports:
@@ -26,7 +26,7 @@ const dockerComposeTpl = `services:
     ports:
       - "{{.Database.MySQLPort}}:3306"
     volumes:
-      - /projects/mysql-data:/var/lib/mysql
+      - {{.ProjectDir}}/mysql-data:/var/lib/mysql
     networks:
       - app-network
 

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -27,6 +28,7 @@ type Config struct {
 	SSHHost    string
 	SSHPort    string
 	GitToken   string // optional, for cloning private repos
+	ProjectDir string // base directory for repos and compose file
 	Services   []ServiceConfig
 	Database   DatabaseConfig
 }
@@ -43,6 +45,11 @@ func GatherConfig() (*Config, error) {
 		cfg.SSHHost = promptRequired(scanner, "SSH host")
 		cfg.SSHPort = prompt(scanner, "SSH port", "22")
 	}
+
+	// --- project directory ---
+	home, _ := os.UserHomeDir()
+	defaultDir := filepath.Join(home, "projects")
+	cfg.ProjectDir = prompt(scanner, "Projects directory", defaultDir)
 
 	// --- git auth ---
 	fmt.Println("\n— Git Authentication —")

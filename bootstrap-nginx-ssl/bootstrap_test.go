@@ -33,8 +33,11 @@ func testConfig(t *testing.T) *Config {
 		}
 	}
 
+	projectDir := filepath.Join(tmpDir, "projects")
+
 	return &Config{
 		TargetMode: "local",
+		ProjectDir: projectDir,
 		Services: []ServiceConfig{
 			{
 				RepoURL: repoDir,
@@ -61,7 +64,7 @@ func TestSetupRepos(t *testing.T) {
 	}
 
 	// Verify the repo was cloned.
-	dockerfilePath := "/projects/myapp/Dockerfile"
+	dockerfilePath := filepath.Join(cfg.ProjectDir, "myapp", "Dockerfile")
 	if _, err := os.Stat(dockerfilePath); err != nil {
 		t.Fatalf("expected %s to exist after clone: %v", dockerfilePath, err)
 	}
@@ -75,12 +78,13 @@ func TestSetupDatabase(t *testing.T) {
 		t.Fatalf("SetupDatabase failed: %v", err)
 	}
 
-	info, err := os.Stat("/projects/mysql-data")
+	dataDir := filepath.Join(cfg.ProjectDir, "mysql-data")
+	info, err := os.Stat(dataDir)
 	if err != nil {
-		t.Fatalf("expected /projects/mysql-data to exist: %v", err)
+		t.Fatalf("expected %s to exist: %v", dataDir, err)
 	}
 	if !info.IsDir() {
-		t.Fatal("/projects/mysql-data is not a directory")
+		t.Fatalf("%s is not a directory", dataDir)
 	}
 }
 
@@ -114,7 +118,7 @@ func TestGenerateComposeFile(t *testing.T) {
 	if !strings.Contains(content, "myapp:") {
 		t.Error("compose output missing service 'myapp'")
 	}
-	if !strings.Contains(content, "build: /projects/myapp") {
+	if !strings.Contains(content, "build: "+cfg.ProjectDir+"/myapp") {
 		t.Error("compose output missing build context")
 	}
 	if !strings.Contains(content, `"3000:3000"`) {
@@ -136,8 +140,8 @@ func TestGenerateComposeFile(t *testing.T) {
 	}
 
 	// Verify it writes to disk.
-	os.MkdirAll("/projects", 0755)
-	composePath := "/projects/docker-compose.yml"
+	os.MkdirAll(cfg.ProjectDir, 0755)
+	composePath := filepath.Join(cfg.ProjectDir, "docker-compose.yml")
 	if err := os.WriteFile(composePath, []byte(content), 0644); err != nil {
 		t.Fatalf("failed to write compose file: %v", err)
 	}
