@@ -26,6 +26,7 @@ type Config struct {
 	SSHUser    string
 	SSHHost    string
 	SSHPort    string
+	GitToken   string // optional, for cloning private repos
 	Services   []ServiceConfig
 	Database   DatabaseConfig
 }
@@ -42,6 +43,10 @@ func GatherConfig() (*Config, error) {
 		cfg.SSHHost = promptRequired(scanner, "SSH host")
 		cfg.SSHPort = prompt(scanner, "SSH port", "22")
 	}
+
+	// --- git auth ---
+	fmt.Println("\n— Git Authentication —")
+	cfg.GitToken = prompt(scanner, "Git token for private repos (leave empty for public)", "")
 
 	// --- services ---
 	fmt.Println("\n— Services —")
