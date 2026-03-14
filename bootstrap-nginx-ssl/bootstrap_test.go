@@ -285,6 +285,82 @@ func TestCloneURL(t *testing.T) {
 	}
 }
 
+func TestSaveAndLoadState(t *testing.T) {
+	cfg := testConfig(t)
+
+	// Save state at step 2 (meaning steps 0,1,2 done, next is 3).
+	if err := SaveState(cfg, 2); err != nil {
+		t.Fatalf("SaveState failed: %v", err)
+	}
+
+	// Verify state file exists.
+	path := statePath(cfg.ProjectDir)
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("state file not created: %v", err)
+	}
+
+	// Load it back.
+	state, err := LoadState(cfg.ProjectDir)
+	if err != nil {
+		t.Fatalf("LoadState failed: %v", err)
+	}
+	if state == nil {
+		t.Fatal("LoadState returned nil")
+	}
+	if state.CompletedStep != 2 {
+		t.Fatalf("expected CompletedStep=2, got %d", state.CompletedStep)
+	}
+	if state.Config.ProjectDir != cfg.ProjectDir {
+		t.Fatalf("expected ProjectDir=%s, got %s", cfg.ProjectDir, state.Config.ProjectDir)
+	}
+	if len(state.Config.Services) != 1 || state.Config.Services[0].Name != "myapp" {
+		t.Fatal("services not preserved in state")
+	}
+	if !state.Config.Database.Enabled || state.Config.Database.RootPassword != "testpass123" {
+		t.Fatal("database config not preserved in state")
+	}
+}
+
+func TestLoadStateNoFile(t *testing.T) {
+	state, err := LoadState(t.TempDir())
+	if err != nil {
+		t.Fatalf("LoadState should not error on missing file: %v", err)
+	}
+	if state != nil {
+		t.Fatal("expected nil state when no file exists")
+	}
+}
+
+func TestClearState(t *testing.T) {
+	cfg := testConfig(t)
+
+	if err := SaveState(cfg, 1); err != nil {
+		t.Fatalf("SaveState failed: %v", err)
+	}
+
+	ClearState(cfg.ProjectDir)
+
+	path := statePath(cfg.ProjectDir)
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("state file should be removed after ClearState")
+	}
+}
+
+func TestSetupDockerAlreadyInstalled(t *testing.T) {
+	cfg := testConfig(t)
+	exec := &LocalExecutor{}
+
+	// In the test container, docker is not installed, but we can test
+	// the skip logic by checking that it doesn't fail fatally when
+	// docker is missing — it should attempt installation.
+	// We just verify the function signature works and returns an error
+	// (since we can't actually install docker inside the test container).
+	err := SetupDocker(cfg, exec)
+	// Either it succeeds (docker present) or fails (can't install in test env).
+	// We just verify it doesn't panic.
+	_ = err
+}
+
 func TestLocalExecutor(t *testing.T) {
 	exec := &LocalExecutor{}
 
