@@ -8,6 +8,7 @@ import (
 )
 
 type step struct {
+	key  string // short identifier used with --skip (e.g. "clone", "nginx")
 	name string
 	fn   func(*Config, Executor) error
 }
@@ -16,14 +17,22 @@ func main() {
 	fmt.Println("=== Bootstrap: Ubuntu + Nginx + Docker + Certbot ===")
 	fmt.Println()
 
-	steps := []step{
-		{"Clone repositories", SetupRepos},
-		{"Prepare database", SetupDatabase},
-		{"Install Docker", SetupDocker},
-		{"Generate docker-compose & start containers", GenerateCompose},
-		{"Configure Nginx reverse proxy", SetupNginx},
-		{"Install Certbot & issue SSL certificates", SetupCertbot},
+	allSteps := []step{
+		{"clone", "Clone repositories", SetupRepos},
+		{"database", "Prepare database", SetupDatabase},
+		{"docker", "Install Docker", SetupDocker},
+		{"compose", "Generate docker-compose & start containers", GenerateCompose},
+		{"nginx", "Configure Nginx reverse proxy", SetupNginx},
+		{"certbot", "Install Certbot & issue SSL certificates", SetupCertbot},
 	}
+
+	// Parse --skip flag from CLI args.
+	skipped := parseSkipFlag(os.Args[1:])
+	if len(skipped) > 0 {
+		fmt.Printf("Skipping steps: %s\n", strings.Join(setKeys(skipped), ", "))
+	}
+
+	steps := filterSteps(allSteps, skipped)
 
 	var cfg *Config
 	startStep := 0
@@ -63,6 +72,56 @@ func main() {
 	// All done — remove state file.
 	ClearState(cfg.ProjectDir)
 	fmt.Println("\n✓ Bootstrap complete!")
+}
+
+// parseSkipFlag extracts the set of step keys to skip from args.
+// Accepts --skip=clone,compose or --skip clone,compose.
+func parseSkipFlag(args []string) map[string]bool {
+	skipped := map[string]bool{}
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		var val string
+		if strings.HasPrefix(arg, "--skip=") {
+			val = strings.TrimPrefix(arg, "--skip=")
+		} else if arg == "--skip" && i+1 < len(args) {
+			i++
+			val = args[i]
+		} else {
+			continue
+		}
+		for _, key := range strings.Split(val, ",") {
+			key = strings.TrimSpace(strings.ToLower(key))
+			if key != "" {
+				skipped[key] = true
+			}
+		}
+	}
+	return skipped
+}
+
+// filterSteps returns only the steps whose key is not in the skipped set.
+func filterSteps(steps []step, skipped map[string]bool) []step {
+	if len(skipped) == 0 {
+		return steps
+	}
+	filtered := make([]step, 0, len(steps))
+	for _, s := range steps {
+		if skipped[s.key] {
+			fmt.Printf("  ↷ Skipping: %s\n", s.name)
+			continue
+		}
+		filtered = append(filtered, s)
+	}
+	return filtered
+}
+
+// setKeys returns the keys of a map as a sorted-ish slice for display.
+func setKeys(m map[string]bool) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 // tryResume looks for a saved state file and offers to resume.
