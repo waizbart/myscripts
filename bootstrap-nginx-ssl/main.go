@@ -26,8 +26,16 @@ func main() {
 		{"certbot", "Install Certbot & issue SSL certificates", SetupCertbot},
 	}
 
+	args := os.Args[1:]
+
+	// Handle --help / -h before doing anything else.
+	if hasFlag(args, "--help", "-h") {
+		printHelp(allSteps)
+		os.Exit(0)
+	}
+
 	// Parse --skip flag from CLI args.
-	skipped := parseSkipFlag(os.Args[1:])
+	skipped := parseSkipFlag(args)
 	if len(skipped) > 0 {
 		fmt.Printf("Skipping steps: %s\n", strings.Join(setKeys(skipped), ", "))
 	}
@@ -72,6 +80,36 @@ func main() {
 	// All done — remove state file.
 	ClearState(cfg.ProjectDir)
 	fmt.Println("\n✓ Bootstrap complete!")
+}
+
+// printHelp prints usage information and available step keys.
+func printHelp(steps []step) {
+	fmt.Println("Usage: bootstrap [--skip=<steps>] [-h|--help]")
+	fmt.Println()
+	fmt.Println("Options:")
+	fmt.Println("  --skip=<steps>   Comma-separated list of steps to skip.")
+	fmt.Println("  -h, --help       Show this help message.")
+	fmt.Println()
+	fmt.Println("Available steps (use with --skip):")
+	for _, s := range steps {
+		fmt.Printf("  %-10s %s\n", s.key, s.name)
+	}
+	fmt.Println()
+	fmt.Println("Examples:")
+	fmt.Println("  bootstrap --skip=clone,compose")
+	fmt.Println("  bootstrap --skip=clone,database,docker,compose  # nginx + certbot only")
+}
+
+// hasFlag reports whether any of the given flags appear in args.
+func hasFlag(args []string, flags ...string) bool {
+	for _, arg := range args {
+		for _, f := range flags {
+			if arg == f {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // parseSkipFlag extracts the set of step keys to skip from args.
