@@ -1,0 +1,23 @@
+{
+  "branchName": "refactor/extract-email-service",
+  "userStories": [
+    {
+      "id": "1",
+      "title": "Ensure full test coverage on email-sending logic before refactor",
+      "description": "Audit `src/notifications/notifications.service.ts` for untested email-sending paths. Add missing unit tests in `src/notifications/__tests__/notifications.service.test.ts`. Do not change production code in this story. Verify with: `npm test -- --grep 'notifications'`.",
+      "passes": false
+    },
+    {
+      "id": "2",
+      "title": "Extract email sending into EmailService class",
+      "description": "Create `src/email/email.service.ts` with a class `EmailService` that wraps the current email transport logic extracted from `notifications.service.ts`. Move only the transport/send logic — keep notification business logic in place. Verify with: `npx tsc --noEmit` and `npm test`.",
+      "passes": false
+    },
+    {
+      "id": "3",
+      "title": "Update NotificationsService to use EmailService",
+      "description": "In `src/notifications/notifications.service.ts`, replace direct transport calls with injected `EmailService`. Existing tests must still pass without modification. Verify with: `npx tsc --noEmit` and `npm test`.",
+      "passes": false
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "branchName": "feature/user-profile",
+  "userStories": [
+    {
+      "id": "1",
+      "title": "Add avatar_url column to users table",
+      "description": "Create a migration adding a nullable `avatar_url` varchar(500) column to the `users` table. Run `npx drizzle-kit push` or equivalent to apply. Verify with: `npx tsc --noEmit` passing with no errors.",
+      "passes": false
+    },
+    {
+      "id": "2",
+      "title": "Expose avatar_url in GET /users/:id response",
+      "description": "Update the user serializer/schema in `src/users/user.schema.ts` to include `avatar_url` in the response body. Verify with: `npx tsc --noEmit` and `npm test -- --grep 'GET /users/:id'`.",
+      "passes": false
+    },
+    {
+      "id": "3",
+      "title": "Accept avatar_url in PATCH /users/:id",
+      "description": "Update the PATCH handler in `src/users/user.controller.ts` to accept and persist `avatar_url`. Validate it is a valid URL or null. Verify with: `npm test -- --grep 'PATCH /users/:id'`.",
+      "passes": false
+    },
+    {
+      "id": "4",
+      "title": "Display avatar in profile page UI",
+      "description": "In `src/components/ProfilePage.tsx`, render the user's avatar using the `avatar_url` field. Fall back to initials if null. Verify with: `npm run test:e2e -- --grep 'profile page'`.",
+      "passes": false
+    }
+  ]
+}

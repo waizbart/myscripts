@@ -1,0 +1,23 @@
+{
+  "branchName": "fix/password-reset-token-expiry",
+  "userStories": [
+    {
+      "id": "1",
+      "title": "Write failing test reproducing the token expiry bug",
+      "description": "In `src/auth/__tests__/password-reset.test.ts`, add a test that requests a password reset, waits past the expiry window, and asserts the token is rejected with 400. This test must fail before the fix. Verify it fails with: `npm test -- --grep 'expired token'`.",
+      "passes": false
+    },
+    {
+      "id": "2",
+      "title": "Fix token expiry check in password reset handler",
+      "description": "In `src/auth/password-reset.service.ts`, the expiry check compares `token.createdAt` instead of `token.expiresAt`. Fix the comparison to use `token.expiresAt`. Verify the test from story 1 now passes: `npm test -- --grep 'expired token'`.",
+      "passes": false
+    },
+    {
+      "id": "3",
+      "title": "E2E: password reset with expired token shows error",
+      "description": "In `e2e/auth/password-reset.spec.ts`, add a test that submits an expired reset token via the UI and asserts the error message 'Link expired' is shown. Verify with: `npm run test:e2e -- --grep 'expired'`.",
+      "passes": false
+    }
+  ]
+}
