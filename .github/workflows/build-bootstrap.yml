@@ -1,0 +1,29 @@
+name: Build bootstrap-nginx-ssl
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "bootstrap-nginx-ssl/**"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: bootstrap-nginx-ssl/go.mod
+
+      - name: Build
+        working-directory: bootstrap-nginx-ssl
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/bootstrap .
+
+      - name: Commit updated binary
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add bootstrap-nginx-ssl/dist/bootstrap
+          git diff --cached --quiet || git commit -m "chore: update dist/bootstrap binary [skip ci]"
+          git push
