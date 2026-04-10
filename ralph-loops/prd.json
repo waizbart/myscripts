@@ -1,0 +1,101 @@
+{
+  "branchName": "fix/service-flow",
+  "userStories": [
+    {
+      "id": "SF-01",
+      "title": "Corrigir merge do service flow: ID-based matching",
+      "description": "Em server/whatsapp-agent.ts, função buildSystemPromptFromDB, linha 206: substituir `customServiceFlow.find(s => s.step === baseStep.step)` por `customServiceFlow.find(s => (baseStep.id && s.id && s.id === baseStep.id) || s.step === baseStep.step)`. Isso garante que o override usa o ID do step como chave primária, caindo no step number apenas como fallback. Verificar com: npm run typecheck passando sem erros.",
+      "passes": true
+    },
+    {
+      "id": "SF-02",
+      "title": "Incluir steps adicionados pelo tenant no flow do agente",
+      "description": "Em server/whatsapp-agent.ts, função buildSystemPromptFromDB, após o .map() do baseFlow (linha ~208): calcular `const extraSteps = (customServiceFlow ?? []).filter(cs => !baseServiceFlow.some(bs => (bs.id && cs.id && bs.id === cs.id) || bs.step === cs.step))` e concatenar ao array flowData antes de renumerar: `const renumbered = [...flowData, ...extraSteps].map((f, i) => ({ ...f, step: i + 1 }))`. Usar renumbered para gerar a string `flow`. Verificar com: npm run typecheck passando sem erros.",
+      "passes": true
+    },
+    {
+      "id": "SF-03",
+      "title": "Adicionar validação Zod no PUT /api/agent-flow",
+      "description": "Em server/routes.ts, handler PUT /api/agent-flow (linha ~943): importar serviceFlowStepSchema de @shared/schema. Criar schema: `const agentFlowBodySchema = z.object({ serviceFlow: z.array(serviceFlowStepSchema.extend({ id: z.string().optional() })).min(1).optional(), rules: z.array(z.object({ text: z.string().min(1), active: z.boolean() })).optional() })`. Substituir o destructure atual por `const parsed = agentFlowBodySchema.safeParse(req.body)` e retornar `res.status(400).json({ error: 'validation_error', fields: parsed.error.flatten().fieldErrors })` se !parsed.success. Usar parsed.data.serviceFlow e parsed.data.rules no restante. Verificar com: npm run typecheck + npm run lint passando sem erros.",
+      "passes": true
+    },
+    {
+      "id": "SF-04",
+      "title": "Corrigir IDs estáveis no drag-and-drop do AgentFlowEditor",
+      "description": "Em client/src/components/agent-flow-editor.tsx: (1) No SortableFlowCard (linha ~77), mudar `useSortable({ id: \\`step-${index}\\` })` para `useSortable({ id: item.id ?? \\`step-${item.step}\\` })`. (2) No return do AgentFlowEditor, no SortableContext, mudar prop `items` para `flow.map(s => s.id ?? \\`step-${s.step}\\`)`. (3) No handleDragEnd, dentro do callback do setLocalFlow, substituir o parseInt por `arr.findIndex(s => (s.id ?? \\`step-${s.step}\\`) === String(active.id))` para oldIndex e o mesmo com over.id para newIndex, onde arr é `prev ?? data?.serviceFlow ?? []`. Verificar com: npm run typecheck + npm run lint passando sem erros.",
+      "passes": true
+    },
+    {
+      "id": "SF-05",
+      "title": "Atualizar testes unitários: ID no baseFlow mock e 3 novos casos de merge",
+      "description": "Em server/whatsapp-agent.serviceflow.test.ts: (1) Adicionar campo id a cada item do baseFlow: `{ step: 1, id: 'base-1', title: 'Identificação', ... }`, `{ step: 2, id: 'base-2', ... }`, `{ step: 3, id: 'base-3', ... }`. (2) Adicionar test 'override por ID prevalece sobre step number': customFlow com `[{ id: 'base-2', step: 1, title: 'Triagem por ID' }]` — verificar que 'Triagem por ID' aparece e 'Identificação' (step 1 do base) não é sobrescrito. (3) Adicionar test 'step adicionado pelo tenant sem match no base aparece no prompt': customFlow com `[{ id: 'tenant-extra', step: 4, title: 'Orientação pós-consulta', description: 'Cuidados após a consulta' }]` — verificar que 'Orientação pós-consulta' aparece no resultado. (4) Adicionar test 'nenhum step extra quando customFlow é subconjunto do base': customFlow com apenas step 2 — verificar que o prompt tem exatamente 3 steps. Verificar com: npm test passando sem erros.",
+      "passes": true
+    },
+    {
+      "id": "SF-06",
+      "title": "QA manual: reordenação de steps reflete corretamente no agente",
+      "description": "Com servidor rodando em localhost:5000. (1) Autenticar: `curl -s -c /tmp/sf.txt -X POST http://localhost:5000/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"admin@clinicalilly.com.br\",\"password\":\"lilly2024\"}' | grep -o '\"ok\":true'` — deve retornar 'ok':true. (2) Obter globalFlow: `curl -s -b /tmp/sf.txt http://localhost:5000/api/agent-flow | node -e \"const d=require('fs').readFileSync('/dev/stdin','utf8'); const j=JSON.parse(d); console.log(JSON.stringify(j.globalFlow.slice(0,2).reverse().map((s,i)=>({...s,step:i+1}))))\"` para montar um flow reordenado. (3) Salvar flow reordenado via PUT e verificar: `curl -s -b /tmp/sf.txt -X PUT http://localhost:5000/api/agent-flow -H 'Content-Type: application/json' -d '{\"serviceFlow\":[...flow reordenado...]}' | grep -o '\"ok\":true'` — deve retornar ok:true. (4) Enviar mensagem: `node scripts/ralph/tools/send_msg.cjs 5511991000001 'Olá, como funciona o atendimento?' | grep -i 'ok\\|sent\\|success'`. (5) Verificar resposta: `node scripts/ralph/tools/check_msgs.cjs 5511991000001 | tail -20`. A resposta do agente deve mencionar o título do step que foi para a posição 1. Documentar resultado em scripts/ralph/reports/qa-report-service-flow.md. Verificar com: grep -i 'PASSOU\\|FALHOU' scripts/ralph/reports/qa-report-service-flow.md retornando ao menos 1 linha.",
+      "passes": true
+    },
+    {
+      "id": "SF-07",
+      "title": "QA manual: step novo adicionado pelo tenant aparece no comportamento do agente",
+      "description": "Com servidor rodando em localhost:5000 e cookie em /tmp/sf.txt do SF-06. (1) Adicionar step novo ao final do flow atual: `curl -s -b /tmp/sf.txt -X PUT http://localhost:5000/api/agent-flow -H 'Content-Type: application/json' -d '{\"serviceFlow\":[{\"step\":1,\"title\":\"Orientação pós-consulta\",\"description\":\"Instrua o paciente sobre cuidados após a consulta\"}]}' | grep -o '\"ok\":true'` — deve retornar ok:true. (2) Confirmar que foi salvo: `curl -s -b /tmp/sf.txt http://localhost:5000/api/agent-flow | node -e \"const d=require('fs').readFileSync('/dev/stdin','utf8'); const j=JSON.parse(d); const found=j.serviceFlow.some(s=>s.title.includes('Orientação')); console.log(found?'ENCONTRADO':'NAO_ENCONTRADO')\"` — deve imprimir ENCONTRADO. (3) Enviar mensagem e verificar via check_msgs.cjs que o agente menciona 'orientação' ou 'pós-consulta' em algum momento do fluxo. Documentar em scripts/ralph/reports/qa-report-service-flow.md. Verificar com: grep -i 'PASSOU\\|FALHOU' scripts/ralph/reports/qa-report-service-flow.md | wc -l retornando >= 2.",
+      "passes": true
+    },
+    {
+      "id": "SF-08",
+      "title": "QA manual: validação rejeita step com título vazio e array vazio",
+      "description": "Com servidor rodando em localhost:5000 e cookie em /tmp/sf.txt. (1) PUT com title vazio: `curl -s -o /dev/null -w '%{http_code}' -b /tmp/sf.txt -X PUT http://localhost:5000/api/agent-flow -H 'Content-Type: application/json' -d '{\"serviceFlow\":[{\"step\":1,\"title\":\"\",\"description\":\"ok\"}]}'` — deve imprimir 400. (2) PUT com array vazio: `curl -s -o /dev/null -w '%{http_code}' -b /tmp/sf.txt -X PUT http://localhost:5000/api/agent-flow -H 'Content-Type: application/json' -d '{\"serviceFlow\":[]}'` — deve imprimir 400. (3) PUT sem autenticação: `curl -s -o /dev/null -w '%{http_code}' -X PUT http://localhost:5000/api/agent-flow -H 'Content-Type: application/json' -d '{\"serviceFlow\":[{\"step\":1,\"title\":\"ok\",\"description\":\"ok\"}]}'` — deve imprimir 401. Verificar com: todos os 3 comandos acima retornando os códigos esperados (400, 400, 401).",
+      "passes": true
+    },
+    {
+      "id": "SF-09",
+      "title": "QA manual: reset restaura flow base",
+      "description": "Com servidor rodando em localhost:5000 e cookie em /tmp/sf.txt. (1) Garantir que há customização salva: `curl -s -b /tmp/sf.txt http://localhost:5000/api/agent-flow | node -e \"const d=require('fs').readFileSync('/dev/stdin','utf8'); console.log(JSON.parse(d).isCustomFlow)\"` — deve imprimir true (resultado do SF-07). (2) Resetar: `curl -s -b /tmp/sf.txt -X POST http://localhost:5000/api/agent-flow/reset | grep -o '\"ok\":true'` — deve retornar ok:true. (3) Verificar que isCustomFlow voltou para false: `curl -s -b /tmp/sf.txt http://localhost:5000/api/agent-flow | node -e \"const d=require('fs').readFileSync('/dev/stdin','utf8'); console.log(JSON.parse(d).isCustomFlow)\"` — deve imprimir false. Verificar com: o comando do passo 3 imprimindo false.",
+      "passes": true
+    },
+    {
+      "id": "SF-10",
+      "title": "Corrigir bugs encontrados no QA manual",
+      "description": "Ler scripts/ralph/reports/qa-report-service-flow.md e listar todos os cenários com status FALHOU que não sejam bugs pré-existentes (BUG-1 a BUG-4 listados em scripts/ralph/CLAUDE.md). Para cada bug novo: identificar arquivo e linha exatos, implementar a correção mínima, rodar npm run typecheck + npm run lint + npm test. Se o arquivo de report não existir ou não houver itens FALHOU novos, registrar 'Sem bugs novos' no progress.txt e marcar passes: true. Verificar com: npm run typecheck + npm run lint + npm test passando sem erros.",
+      "passes": true
+    },
+    {
+      "id": "SF-11",
+      "title": "Regressão E2E: editor visual de service flow",
+      "description": "Em e2e/service-flow-tenant.spec.ts, manter os testes existentes e adicionar novo describe 'Service flow API — save, add, reset': (A) via apiRequest PUT com serviceFlow de 2 steps válidos, verificar que GET /api/agent-flow retorna os 2 steps com os títulos corretos e isCustomFlow: true; (B) via apiRequest PUT adicionando step com title 'Novo Step QA', verificar que GET retorna esse step; (C) via apiRequest PUT com body `{ serviceFlow: [{ step: 1, title: '', description: 'x' }] }`, verificar que status é 400; (D) via apiRequest POST /api/agent-flow/reset, verificar que GET retorna isCustomFlow: false. Todos os 2 testes existentes (locked step disabled, unlocked step editable) devem continuar passando sem modificação. Verificar com: npm run test:e2e passando sem erros.",
+      "passes": true
+    },
+    {
+      "id": "SF-12",
+      "title": "Limite de tamanho em título e descrição de steps (Zod + frontend)",
+      "description": "Em shared/schema.ts, atualizar serviceFlowStepSchema: mudar `title: z.string()` para `title: z.string().min(1).max(80)` e `description: z.string()` para `description: z.string().min(1).max(500)`. Em server/routes.ts, o agentFlowBodySchema (criado em SF-03) herda essas restrições automaticamente via serviceFlowStepSchema — nenhuma mudança adicional no backend. Em client/src/components/agent-flow-editor.tsx, adicionar `maxLength={80}` no Input do título e `maxLength={500}` no Textarea da descrição dentro de SortableFlowCard. Verificar com: npm run typecheck + npm run lint passando sem erros.",
+      "passes": true
+    },
+    {
+      "id": "SF-13",
+      "title": "Aviso de mudanças não salvas ao navegar para fora do editor",
+      "description": "Em client/src/components/agent-flow-editor.tsx, adicionar useEffect que registra/remove o handler de beforeunload baseado no estado hasChanges: `useEffect(() => { const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); }; if (hasChanges) window.addEventListener('beforeunload', handler); else window.removeEventListener('beforeunload', handler); return () => window.removeEventListener('beforeunload', handler); }, [hasChanges])`. Importar useEffect se ainda não importado. Verificar com: npm run typecheck + npm run lint passando sem erros.",
+      "passes": true
+    },
+    {
+      "id": "SF-14",
+      "title": "Auditar e adicionar data-testid ausentes no AgentFlowEditor",
+      "description": "Em client/src/components/agent-flow-editor.tsx, dentro do SortableFlowCard, garantir que os seguintes atributos existem: `data-testid={\\`input-flow-step-title-${index}\\`` no Input do título, `data-testid={\\`input-flow-step-description-${index}\\`` no Textarea da descrição, `data-testid={\\`icon-locked-step-${item.step}\\`` no ícone Lock (quando step está locked), `data-testid={\\`button-delete-step-${index}\\`` no botão de deletar. No AgentFlowEditor, adicionar `data-testid='button-save-flow'` no botão Salvar e `data-testid='button-reset-flow'` no botão Restaurar. Verificar com: npm run typecheck + npm run lint passando sem erros. Confirmar que o teste E2E existente (que usa icon-locked-step-1 e input-flow-step-title-0) continua passando: npm run test:e2e.",
+      "passes": true
+    },
+    {
+      "id": "SF-15",
+      "title": "Mover backfill de IDs de steps do GET para migration SQL",
+      "description": "Em migrations/, criar arquivo 0012_backfill_service_flow_step_ids.sql com SQL que atribui UUIDs estáveis a steps sem id no campo JSONB service_flow da tabela system_prompt_versions: `UPDATE system_prompt_versions SET service_flow = ( SELECT jsonb_agg( CASE WHEN step->>'id' IS NULL THEN step || jsonb_build_object('id', gen_random_uuid()::text) ELSE step END ORDER BY (step->>'step')::int ) FROM jsonb_array_elements(service_flow) AS step ) WHERE service_flow IS NOT NULL AND EXISTS ( SELECT 1 FROM jsonb_array_elements(service_flow) AS step WHERE step->>'id' IS NULL );`. Registrar a migration no journal do Drizzle (drizzle/meta/_journal.json) seguindo o padrão das entradas existentes. Em server/routes.ts, remover o bloco de backfill fire-and-forget do handler GET /api/agent-flow (linhas 907-920) pois a migration garante que todos os steps já têm id. Verificar com: npm run db:migrate sem erros + npm run typecheck passando.",
+      "passes": true
+    },
+    {
+      "id": "SF-16",
+      "title": "Cache de tenant no agente com invalidação no PUT /api/agent-flow",
+      "description": "Em server/whatsapp-agent.ts, adicionar cache em memória para dados de tenant por tenantId com TTL de 30 segundos, similar ao cache de prompt já existente: `const _tenantCache = new Map<number, { data: Tenant; ts: number }>()`. Criar função `async function getTenantCached(tenantId: number): Promise<Tenant | null>` que consulta o cache antes de chamar storage.getTenant e atualiza o cache após miss. Exportar `function invalidateTenantCache(tenantId: number) { _tenantCache.delete(tenantId); }`. Em server/routes.ts, no handler PUT /api/agent-flow, importar invalidateTenantCache e chamá-la com req.session.tenantId após o storage.updateTenant bem-sucedido. Fazer o mesmo no handler POST /api/agent-flow/reset. Substituir a chamada a storage.getTenant dentro de buildSystemPromptFromDB (ou onde o tenant é carregado no agente) por getTenantCached. Verificar com: npm run typecheck + npm run lint passando sem erros.",
+      "passes": true
+    }
+  ]
+}
