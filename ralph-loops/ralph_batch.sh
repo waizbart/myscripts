@@ -1,17 +1,23 @@
 #!/bin/bash
-# milestones.sh
 
-PDRS=(
-  "scripts/ralph/prds/prd-bugfix-qa.json"
-  "scripts/ralph/prds/prd-qa-regression.json"
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_DIR="${RALPH_WORKSPACE_DIR:-$PWD}"
+TOOL="${RALPH_BATCH_TOOL:-claude}"
+MAX_ITERATIONS="${RALPH_BATCH_MAX_ITERATIONS:-50}"
+
+PRDS=(
+  "$SCRIPT_DIR/prds/prd-feature-example.json"
+  "$SCRIPT_DIR/prds/prd-bugfix-example.json"
 )
 
-for prd in "${PDRS[@]}"; do
-  echo "=== Iniciando: $prd ==="
+for prd in "${PRDS[@]}"; do
+  echo "=== Starting: $prd ==="
 
-  cp "$prd" scripts/ralph/prd.json
-  ./scripts/ralph/ralph.sh --tool claude 50
+  cp "$prd" "$SCRIPT_DIR/prd.json"
+  "$SCRIPT_DIR/ralph.sh" --tool "$TOOL" "$MAX_ITERATIONS"
 
-  git checkout main
-  echo "=== Concluído: $prd ==="
+  git -C "$WORKSPACE_DIR" checkout main
+  echo "=== Completed: $prd ==="
 done

@@ -2,7 +2,7 @@
 
 Autonomous AI agent loop for software development. Ralph runs in iterations — each one picks a single user story from a PRD, implements it, tests it, commits it, and signals the next iteration to continue.
 
-Works with [Claude Code](https://claude.ai/code) and [Amp](https://ampcode.com).
+Works with [Claude Code](https://claude.ai/code), [Codex CLI](https://developers.openai.com/codex/cli), and [Amp](https://ampcode.com).
 
 ## How It Works
 
@@ -67,6 +67,9 @@ Save it as `prd.json` in this directory.
 # Using Amp
 ./ralph.sh --tool amp
 
+# Using Codex CLI
+./ralph.sh --tool codex
+
 # Custom iteration limit
 ./ralph.sh --tool claude 25
 ```
@@ -117,6 +120,18 @@ Keep each story atomic — one responsibility, one commit.
 
 To add project-specific context (stack details, env setup, QA instructions), either append to `CLAUDE.md` or pass a composed prompt via the `RALPH_PROMPT` env var.
 
+## Limit Retries
+
+When Claude or Codex returns a recognizable usage-limit or quota message, `ralph.sh` waits and retries the same iteration until access returns. Non-limit failures still stop the run immediately so real repo or tool errors are visible.
+
+Environment knobs:
+
+- `RALPH_RETRY_SLEEP_SECONDS` — base wait between retries (default: `300`)
+- `RALPH_RETRY_MAX_SLEEP_SECONDS` — max wait when using exponential backoff (default: `1800`)
+- `RALPH_RETRY_BACKOFF_MODE` — `fixed` or `exponential` (default: `fixed`)
+- `RALPH_WORKSPACE_DIR` — working directory for the agent CLIs (default: current directory)
+- `RALPH_PROMPT_FILE` — alternate prompt file path (default: `ralph-loops/CLAUDE.md`)
+
 ## Progress & Learnings
 
 `progress.txt` accumulates context across all iterations. The agent reads it at the start of every run. Structure:
@@ -141,4 +156,5 @@ When `ralph.sh` detects a branch change between runs (via `.last-branch`), it au
 
 - `jq` — for parsing `prd.json`
 - `claude` CLI — for `--tool claude` ([install](https://claude.ai/code))
+- `codex` CLI — for `--tool codex` ([install](https://developers.openai.com/codex/cli))
 - `amp` CLI — for `--tool amp` ([install](https://ampcode.com))
