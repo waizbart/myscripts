@@ -9,7 +9,7 @@ usage() {
 Usage: ./ralph.sh [--tool amp|claude|codex] [max_iterations]
 
 Environment:
-  RALPH_WORKSPACE_DIR           Directory where the agent should work (default: current directory)
+  RALPH_WORKSPACE_DIR           Directory where the agent should work (default: current Git repo root; or a single nested repo if auto-detected)
   RALPH_PROMPT_FILE             Prompt file to feed into the agent (default: ralph-loops/CLAUDE.md)
   RALPH_PROMPT                  Inline prompt content. Overrides RALPH_PROMPT_FILE when set.
   RALPH_RETRY_SLEEP_SECONDS     Wait between retryable limit errors (default: 300)
@@ -24,7 +24,7 @@ PROGRESS_FILE="$SCRIPT_DIR/progress.txt"
 ARCHIVE_DIR="$SCRIPT_DIR/archive"
 LAST_BRANCH_FILE="$SCRIPT_DIR/.last-branch"
 PROMPT_FILE="${RALPH_PROMPT_FILE:-$SCRIPT_DIR/CLAUDE.md}"
-WORKSPACE_DIR="${RALPH_WORKSPACE_DIR:-$PWD}"
+WORKSPACE_DIR=""
 RETRY_SLEEP_SECONDS="${RALPH_RETRY_SLEEP_SECONDS:-300}"
 RETRY_MAX_SLEEP_SECONDS="${RALPH_RETRY_MAX_SLEEP_SECONDS:-1800}"
 RETRY_BACKOFF_MODE="${RALPH_RETRY_BACKOFF_MODE:-fixed}"
@@ -116,6 +116,46 @@ validate_config() {
     echo "Error: RALPH_WORKSPACE_DIR '$WORKSPACE_DIR' does not exist."
     exit 1
   fi
+
+  if ! git -C "$WORKSPACE_DIR" rev-parse --show-toplevel >/dev/null 2>&1; then
+    echo "Error: Workspace '$WORKSPACE_DIR' is not inside a Git repository."
+    echo "Set RALPH_WORKSPACE_DIR to your project repository root before running Ralph."
+    exit 1
+  fi
+}
+
+resolve_workspace_dir() {
+  local requested_dir
+  local git_root
+  local repo_candidates=()
+  local candidate
+
+  requested_dir="${RALPH_WORKSPACE_DIR:-$PWD}"
+
+  if [[ ! -d "$requested_dir" ]]; then
+    WORKSPACE_DIR="$requested_dir"
+    return
+  fi
+
+  git_root="$(git -C "$requested_dir" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [[ -n "$git_root" ]]; then
+    WORKSPACE_DIR="$git_root"
+    return
+  fi
+
+  if [[ -z "${RALPH_WORKSPACE_DIR:-}" ]]; then
+    while IFS= read -r candidate; do
+      repo_candidates+=("$(dirname "$candidate")")
+    done < <(find "$requested_dir" -mindepth 2 -maxdepth 2 -type d -name .git 2>/dev/null | sort)
+
+    if (( ${#repo_candidates[@]} == 1 )); then
+      WORKSPACE_DIR="${repo_candidates[0]}"
+      echo "Auto-detected workspace Git repository: $WORKSPACE_DIR"
+      return
+    fi
+  fi
+
+  WORKSPACE_DIR="$requested_dir"
 }
 
 required_command() {
@@ -182,7 +222,7 @@ run_tool_once() {
       run_command_with_prompt "$output_file" claude --dangerously-skip-permissions --print
       ;;
     codex)
-      run_command_with_prompt "$output_file" codex exec --full-auto -C "$WORKSPACE_DIR"
+      run_command_with_prompt "$output_file" codex exec --full-auto --skip-git-repo-check -C "$WORKSPACE_DIR"
       ;;
   esac
 }
@@ -247,6 +287,7 @@ run_tool_with_retry() {
   done
 }
 
+resolve_workspace_dir
 validate_config
 ensure_tool_installed
 prepare_prompt_source
@@ -300,18 +341,18 @@ for i in $(seq 1 "$MAX_ITERATIONS"); do
 
   run_tool_with_retry
 
-  if grep -q "<promise>COMPLETE</promise>" <<<"$TOOL_OUTPUT"; then
-    echo ""
-    echo "Ralph completed all tasks!"
-    echo "Completed at iteration $i of $MAX_ITERATIONS"
-    exit 0
-  fi
-
   if (( TOOL_EXIT_STATUS != 0 )); then
     echo ""
     echo "Ralph stopped because '$TOOL' exited with status $TOOL_EXIT_STATUS."
     echo "The failure was not classified as a retryable usage-limit error."
     exit "$TOOL_EXIT_STATUS"
+  fi
+
+  if grep -q "<promise>COMPLETE</promise>" <<<"$TOOL_OUTPUT"; then
+    echo ""
+    echo "Ralph completed all tasks!"
+    echo "Completed at iteration $i of $MAX_ITERATIONS"
+    exit 0
   fi
 
   echo "Iteration $i complete. Continuing..."
